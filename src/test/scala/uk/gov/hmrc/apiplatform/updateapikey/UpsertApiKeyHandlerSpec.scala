@@ -21,18 +21,22 @@ import scala.collection.JavaConversions._
 class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSugar {
 
   trait Setup {
-    def mockedGetApiKeysCallReturns(existingAPIKeys: List[(String, String, String)]): OngoingStubbing[GetApiKeysResponse] =
+    case class TestApiKey(id: String, name: String, value: String)
+
+    def toApiKey(testApiKey: TestApiKey): ApiKey = ApiKey.builder().id(testApiKey.id).name(testApiKey.name).value(testApiKey.value).build()
+    def toUsagePlanKey(testApiKey: TestApiKey): UsagePlanKey = UsagePlanKey.builder().value(testApiKey.id).build()
+
+    def mockedGetApiKeysCallReturns(existingAPIKeys: Seq[TestApiKey]): OngoingStubbing[GetApiKeysResponse] =
       when(mockAPIGatewayClient.getApiKeys(any[GetApiKeysRequest]))
         .thenReturn(
           GetApiKeysResponse.builder()
-            .items(
-              existingAPIKeys.map((apiKey: (String, String, String)) => ApiKey.builder().id(apiKey._1).name(apiKey._2).value(apiKey._3).build()))
+            .items(existingAPIKeys.map(toApiKey))
             .build())
 
-    def mockedGetUsagePlanKeysReturns(bronzeUsagePlanKeys: Seq[String] = Seq.empty,
-                                      silverUsagePlanKeys: Seq[String] = Seq.empty,
-                                      goldUsagePlanKeys: Seq[String] = Seq.empty,
-                                      platinumUsagePlanKeys: Seq[String] = Seq.empty): OngoingStubbing[GetUsagePlanKeysResponse] =
+    def mockedGetUsagePlanKeysReturns(bronzeUsagePlanKeys: Seq[TestApiKey] = Seq.empty,
+                                      silverUsagePlanKeys: Seq[TestApiKey] = Seq.empty,
+                                      goldUsagePlanKeys: Seq[TestApiKey] = Seq.empty,
+                                      platinumUsagePlanKeys: Seq[TestApiKey] = Seq.empty): OngoingStubbing[GetUsagePlanKeysResponse] =
       when(mockAPIGatewayClient.getUsagePlanKeys(any[GetUsagePlanKeysRequest]))
         .thenAnswer(new GetUsagePlanKeysAnswer(bronzeUsagePlanKeys, silverUsagePlanKeys, goldUsagePlanKeys, platinumUsagePlanKeys))
 
@@ -57,28 +61,50 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
       captor
     }
 
-    class GetUsagePlanKeysAnswer(bronzeUsagePlanKeys: Seq[String],
-                                 silverUsagePlanKeys: Seq[String],
-                                 goldUsagePlanKeys: Seq[String],
-                                 platinumUsagePlanKeys: Seq[String]) extends Answer[GetUsagePlanKeysResponse] {
-
+    class GetUsagePlanKeysAnswer(var bronzeUsagePlanKeys: Seq[TestApiKey],
+                                 var silverUsagePlanKeys: Seq[TestApiKey],
+                                 var goldUsagePlanKeys: Seq[TestApiKey],
+                                 var platinumUsagePlanKeys: Seq[TestApiKey]) extends Answer[GetUsagePlanKeysResponse] {
       override def answer(invocationOnMock: InvocationOnMock): GetUsagePlanKeysResponse = {
-        val request: GetUsagePlanKeysRequest = invocationOnMock.getArgument(0)
-
-        def usagePlanKeys: Seq[UsagePlanKey] =
-          if (request.usagePlanId() == usagePlans("BRONZE")) {
-            bronzeUsagePlanKeys.map(key => UsagePlanKey.builder().value(key).build())
-          } else if (request.usagePlanId() == usagePlans("SILVER")) {
-            silverUsagePlanKeys.map(key => UsagePlanKey.builder().value(key).build())
-          } else if (request.usagePlanId() == usagePlans("GOLD")) {
-            goldUsagePlanKeys.map(key => UsagePlanKey.builder().value(key).build())
-          } else if (request.usagePlanId() == usagePlans("PLATINUM")) {
-            platinumUsagePlanKeys.map(key => UsagePlanKey.builder().value(key).build())
+        def usagePlanKeys(usagePlanId: String): Seq[UsagePlanKey] =
+          if (usagePlanId == usagePlans("BRONZE")) {
+            bronzeUsagePlanKeys.map(toUsagePlanKey)
+          } else if (usagePlanId == usagePlans("SILVER")) {
+            silverUsagePlanKeys.map(toUsagePlanKey)
+          } else if (usagePlanId == usagePlans("GOLD")) {
+            goldUsagePlanKeys.map(toUsagePlanKey)
+          } else if (usagePlanId == usagePlans("PLATINUM")) {
+            platinumUsagePlanKeys.map(toUsagePlanKey)
           } else {
             Seq.empty
           }
 
-        GetUsagePlanKeysResponse.builder().items(usagePlanKeys).build()
+        val request: GetUsagePlanKeysRequest = invocationOnMock.getArgument(0)
+        GetUsagePlanKeysResponse.builder().items(usagePlanKeys(request.usagePlanId())).build()
+      }
+    }
+
+    class PagedGetUsagePlanKeysAnswer(matchingAPIKey: TestApiKey, usagePlanId: String, numberOfPages: Int) extends Answer[GetUsagePlanKeysResponse] {
+      override def answer(invocationOnMock: InvocationOnMock): GetUsagePlanKeysResponse = {
+        def randomUsagePlanKey: UsagePlanKey = toUsagePlanKey(TestApiKey(UUID.randomUUID().toString, UUID.randomUUID().toString, UUID.randomUUID().toString))
+
+        def nextPosition(position: String): String = {
+          position match {
+            case null => "2"
+            case pos => (pos.toInt + 1).toString
+          }
+        }
+
+        val request: GetUsagePlanKeysRequest = invocationOnMock.getArgument(0)
+        if (request.usagePlanId() != usagePlanId)
+          GetUsagePlanKeysResponse.builder().build()
+        else {
+          if (request.position() == numberOfPages.toString)
+            GetUsagePlanKeysResponse.builder().items(toUsagePlanKey(matchingAPIKey)).build()
+          else
+            GetUsagePlanKeysResponse.builder().position(nextPosition(request.position())).items(randomUsagePlanKey).build()
+        }
+
       }
     }
 
@@ -160,9 +186,10 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
       val apiKeyId: String = UUID.randomUUID().toString
       val apiKeyName: String = UUID.randomUUID().toString
       val apiKeyValue: String = UUID.randomUUID().toString
+      val matchingApiKey: TestApiKey = TestApiKey(apiKeyId, apiKeyName, apiKeyValue)
 
-      mockedGetApiKeysCallReturns(List((apiKeyId, apiKeyName, apiKeyValue)))
-      mockedGetUsagePlanKeysReturns(bronzeUsagePlanKeys = Seq(apiKeyId))
+      mockedGetApiKeysCallReturns(List(matchingApiKey))
+      mockedGetUsagePlanKeysReturns(bronzeUsagePlanKeys = Seq(matchingApiKey))
 
       upsertApiKeyHandler.handleInput(validSQSEvent(usagePlan, apiKeyName, apiKeyValue), mockContext)
 
@@ -174,9 +201,10 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
       val apiKeyId: String = UUID.randomUUID().toString
       val apiKeyName: String = UUID.randomUUID().toString
       val apiKeyValue: String = UUID.randomUUID().toString
+      val matchingApiKey: TestApiKey = TestApiKey(apiKeyId, apiKeyName, apiKeyValue)
 
-      mockedGetApiKeysCallReturns(List((apiKeyId, apiKeyName, apiKeyValue)))
-      mockedGetUsagePlanKeysReturns(bronzeUsagePlanKeys = Seq(apiKeyId))
+      mockedGetApiKeysCallReturns(List(matchingApiKey))
+      mockedGetUsagePlanKeysReturns(bronzeUsagePlanKeys = Seq(matchingApiKey))
       private val deleteUsagePlanKeyRequestCaptor: ArgumentCaptor[DeleteUsagePlanKeyRequest] = captureDeleteUsagePlanKeyRequests()
       private val createUsagePlanKeyRequestCaptor: ArgumentCaptor[CreateUsagePlanKeyRequest] = captureCreateUsagePlanKeyRequests()
 
@@ -184,6 +212,22 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
 
       verifyCapturedDeleteUsagePlanKeyRequest(deleteUsagePlanKeyRequestCaptor, apiKeyId, usagePlans("BRONZE"))
       verifyCapturedCreateUsagePlanKeyRequest(createUsagePlanKeyRequestCaptor, apiKeyId, usagePlans(usagePlan))
+    }
+
+    "handle multiple pages of Usage Plan Keys returned" in new Setup {
+      val usagePlan: String = "BRONZE"
+      val apiKeyId: String = UUID.randomUUID().toString
+      val apiKeyName: String = UUID.randomUUID().toString
+      val apiKeyValue: String = UUID.randomUUID().toString
+      val matchingApiKey: TestApiKey = TestApiKey(apiKeyId, apiKeyName, apiKeyValue)
+
+      mockedGetApiKeysCallReturns(List(matchingApiKey))
+      when(mockAPIGatewayClient.getUsagePlanKeys(any[GetUsagePlanKeysRequest]))
+        .thenAnswer(new PagedGetUsagePlanKeysAnswer(matchingApiKey, usagePlans(usagePlan), 5))
+
+      upsertApiKeyHandler.handleInput(validSQSEvent(usagePlan, apiKeyName, apiKeyValue), mockContext)
+
+      verify(mockAPIGatewayClient, times(0)).createUsagePlanKey(any[CreateUsagePlanKeyRequest])
     }
 
     "throw exception if the event has no messages" in new Setup {
