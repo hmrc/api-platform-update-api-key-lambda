@@ -23,6 +23,14 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
   }
 
   override def handleInput(input: SQSEvent, context: Context): Unit = {
+    def usagePlanIdsFromEnvironment(): Map[String, String] =
+      environment.get(UsagePlansEnvironmentVariable) match {
+        case Some(usagePlansJson) => fromJson[Map[String, String]](usagePlansJson)
+        case None => throw new RuntimeException(s"No Usage Plans found under Environment Variable [$UsagePlansEnvironmentVariable]")
+      }
+
+    def isNewAPIKey(findAPIKeyIdResult: (String, Boolean)): Boolean = findAPIKeyIdResult._2
+
     implicit val logger: LambdaLogger = context.getLogger
 
     if (input.getRecords.size != 1) throw new IllegalArgumentException(s"Invalid number of records: ${input.getRecords.size}")
@@ -43,16 +51,7 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
     }
   }
 
-  def isNewAPIKey(findAPIKeyIdResult: (String, Boolean)): Boolean = findAPIKeyIdResult._2
-
-  def usagePlanIdsFromEnvironment(): Map[String, String] = {
-    environment.get(UsagePlansEnvironmentVariable) match {
-      case Some(usagePlansJson) => fromJson[Map[String, String]](usagePlansJson)
-      case None => throw new RuntimeException(s"No Usage Plans found under Environment Variable [$UsagePlansEnvironmentVariable]")
-    }
-  }
-
-  def findApiKeyId(updateRequest: UpdateAPIKeyRequest)(implicit logger: LambdaLogger): (String, Boolean) = {
+  private def findApiKeyId(updateRequest: UpdateAPIKeyRequest)(implicit logger: LambdaLogger): (String, Boolean) = {
     def createNewApiKey(apiKeyName: String, apiKeyValue: String): String =
       apiGatewayClient.createApiKey(
         CreateApiKeyRequest.builder()
@@ -72,7 +71,7 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
     }
   }
 
-  def addAPIKeyToUsagePlan(apiKeyId: String, usagePlanId: String) =
+  private def addAPIKeyToUsagePlan(apiKeyId: String, usagePlanId: String) =
     apiGatewayClient.createUsagePlanKey(
       CreateUsagePlanKeyRequest.builder()
         .keyId(apiKeyId)
@@ -81,7 +80,8 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
         .build())
 
 
-  def moveAPIKeyToUsagePlan(apiKeyId: String, requestedUsagePlanId: String)(implicit logger: LambdaLogger, usagePlans: Map[String, String]): Unit = {
+  private def moveAPIKeyToUsagePlan(apiKeyId: String, requestedUsagePlanId: String)
+                                   (implicit logger: LambdaLogger, usagePlans: Map[String, String]): Unit = {
     def removeAPIKeyFromUsagePlan(apiKeyId: String, usagePlanId: String) =
       apiGatewayClient.deleteUsagePlanKey(
         DeleteUsagePlanKeyRequest.builder()
@@ -89,21 +89,25 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
           .keyId(apiKeyId)
           .build())
 
+    // Remove API Key from Usage Plans other than the one being requested
     usagePlans.values
       .filterNot(_ == requestedUsagePlanId)
       .filter(otherUsagePlanId => apiKeyAssociatedWithUsagePlan(apiKeyId, otherUsagePlanId))
-      .foreach(usagePlanToRemoveKeyFrom => removeAPIKeyFromUsagePlan(apiKeyId, usagePlanToRemoveKeyFrom))
+      .foreach(usagePlanToRemoveKeyFrom => {
+        logger.log(s"Removing API Key [$apiKeyId] from Usage Plan [$usagePlanToRemoveKeyFrom]")
+        removeAPIKeyFromUsagePlan(apiKeyId, usagePlanToRemoveKeyFrom)
+      })
 
-    if(!apiKeyAssociatedWithUsagePlan(apiKeyId, requestedUsagePlanId))
+    // Add API Key to requested Usage Plan if it is not already associated with it
+    if(!apiKeyAssociatedWithUsagePlan(apiKeyId, requestedUsagePlanId)) {
+      logger.log(s"Adding API Key [$apiKeyId] to Usage Plan [$requestedUsagePlanId]")
       addAPIKeyToUsagePlan(apiKeyId, requestedUsagePlanId)
-    else
+    } else
       logger.log(s"API Key [$apiKeyId] is already associated with requested Usage Plan [$requestedUsagePlanId]")
   }
 
-  def apiKeyAssociatedWithUsagePlan(apiKeyId: String, usagePlanId: String): Boolean = apiKeyAssociatedWithUsagePlan(apiKeyId, usagePlanId, None)
-
   @tailrec
-  private def apiKeyAssociatedWithUsagePlan(apiKeyId: String, usagePlanId: String, position: Option[String]): Boolean = {
+  private def apiKeyAssociatedWithUsagePlan(apiKeyId: String, usagePlanId: String, position: Option[String] = None): Boolean = {
     def buildGetUsagePlanKeysRequest(position: Option[String]): GetUsagePlanKeysRequest = {
       position match {
         case Some(p) => GetUsagePlanKeysRequest.builder().usagePlanId(usagePlanId).limit(Limit).position(p).build()
