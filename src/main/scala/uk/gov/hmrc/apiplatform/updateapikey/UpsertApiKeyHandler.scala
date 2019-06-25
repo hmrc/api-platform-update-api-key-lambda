@@ -38,7 +38,7 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
     implicit val usagePlans: Map[String, String] = usagePlanIdsFromEnvironment()
     val updateRequest: UpdateAPIKeyRequest = fromJson[UpdateAPIKeyRequest](input.getRecords.get(0).getBody)
 
-    val requestedUsagePlanId: String  = usagePlans.get(updateRequest.usagePlan) match {
+    val requestedUsagePlanId: String  = usagePlans.get(updateRequest.usagePlan.toUpperCase) match {
       case Some(usagePlanId) => usagePlanId
       case None => throw new IllegalArgumentException(s"Requested Usage Plan [${updateRequest.usagePlan}] does not exist")
     }

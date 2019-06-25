@@ -230,6 +230,21 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
       verify(mockAPIGatewayClient, times(0)).createUsagePlanKey(any[CreateUsagePlanKeyRequest])
     }
 
+    "handle lower case Usage Plan name" in new Setup {
+      val usagePlan: String = "bronze"
+      val apiKeyId: String = UUID.randomUUID().toString
+      val apiKeyName: String = UUID.randomUUID().toString
+      val apiKeyValue: String = UUID.randomUUID().toString
+      val matchingApiKey: TestApiKey = TestApiKey(apiKeyId, apiKeyName, apiKeyValue)
+
+      mockedGetApiKeysCallReturns(List(matchingApiKey))
+      mockedGetUsagePlanKeysReturns(bronzeUsagePlanKeys = Seq(matchingApiKey))
+
+      upsertApiKeyHandler.handleInput(validSQSEvent(usagePlan, apiKeyName, apiKeyValue), mockContext)
+
+      verify(mockAPIGatewayClient, times(0)).createUsagePlanKey(any[CreateUsagePlanKeyRequest])
+    }
+
     "throw exception if the event has no messages" in new Setup {
       val sqsEvent: SQSEvent = buildSQSEvent(List())
 
