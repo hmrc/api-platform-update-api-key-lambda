@@ -267,17 +267,17 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
       val upsertApiKeyHandler = new UpsertApiKeyHandler(mock[ApiGatewayClient], mock[SqsClient], Map())
 
       val exception =
-        intercept[RuntimeException](upsertApiKeyHandler.handleInput(buildSQSEvent(List(updateMessage("BRONZE", "abc", "123"))), mockContext))
+        intercept[NoSuchElementException](upsertApiKeyHandler.handleInput(buildSQSEvent(List(updateMessage("BRONZE", "abc", "123"))), mockContext))
 
-      exception.getMessage shouldEqual "No Usage Plans found under Environment Variable [usage_plans]"
+      exception.getMessage shouldEqual "key not found: usage_plans"
     }
 
     "throw exception if requested Usage Plan does not exist" in new Setup {
       val invalidUsagePlan = "foobar"
-      val exception: IllegalArgumentException =
-        intercept[IllegalArgumentException](upsertApiKeyHandler.handleInput(validSQSEvent(invalidUsagePlan, UUID.randomUUID().toString, UUID.randomUUID().toString), mockContext))
+      val exception: NoSuchElementException =
+        intercept[NoSuchElementException](upsertApiKeyHandler.handleInput(validSQSEvent(invalidUsagePlan, UUID.randomUUID().toString, UUID.randomUUID().toString), mockContext))
 
-      exception.getMessage shouldEqual s"Requested Usage Plan [$invalidUsagePlan] does not exist"
+      exception.getMessage shouldEqual s"key not found: ${invalidUsagePlan.toUpperCase}"
     }
   }
 }

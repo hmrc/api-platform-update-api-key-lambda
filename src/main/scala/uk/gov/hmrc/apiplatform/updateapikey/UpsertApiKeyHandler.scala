@@ -23,35 +23,17 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
   }
 
   override def handleInput(input: SQSEvent, context: Context): Unit = {
-    def usagePlanIdsFromEnvironment(): Map[String, String] =
-      environment.get(UsagePlansEnvironmentVariable) match {
-        case Some(usagePlansJson) => fromJson[Map[String, String]](usagePlansJson)
-        case None => throw new RuntimeException(s"No Usage Plans found under Environment Variable [$UsagePlansEnvironmentVariable]")
-      }
-
-    def isNewAPIKey(findAPIKeyIdResult: (String, Boolean)): Boolean = findAPIKeyIdResult._2
-
+    if (input.getRecords.size != 1) throw new IllegalArgumentException(s"Invalid number of records: ${input.getRecords.size}")
+    implicit val usagePlans: Map[String, String] = fromJson[Map[String, String]](environment(UsagePlansEnvironmentVariable))
     implicit val logger: LambdaLogger = context.getLogger
 
-    if (input.getRecords.size != 1) throw new IllegalArgumentException(s"Invalid number of records: ${input.getRecords.size}")
-
-    implicit val usagePlans: Map[String, String] = usagePlanIdsFromEnvironment()
     val updateRequest: UpdateAPIKeyRequest = fromJson[UpdateAPIKeyRequest](input.getRecords.get(0).getBody)
-
-    val requestedUsagePlanId: String  = usagePlans.get(updateRequest.usagePlan.toUpperCase) match {
-      case Some(usagePlanId) => usagePlanId
-      case None => throw new IllegalArgumentException(s"Requested Usage Plan [${updateRequest.usagePlan}] does not exist")
-    }
-
-    val findAPIKeyIdResult: (String, Boolean) = findApiKeyId(updateRequest)
-    if (isNewAPIKey(findAPIKeyIdResult)) {
-      addAPIKeyToUsagePlan(findAPIKeyIdResult._1, requestedUsagePlanId)
-    } else {
-      moveAPIKeyToUsagePlan(findAPIKeyIdResult._1, requestedUsagePlanId)
-    }
+    updateUsagePlan(updateRequest)
   }
 
-  private def findApiKeyId(updateRequest: UpdateAPIKeyRequest)(implicit logger: LambdaLogger): (String, Boolean) = {
+  private def updateUsagePlan(updateRequest: UpdateAPIKeyRequest)(implicit logger: LambdaLogger, usagePlans: Map[String, String]): Unit = {
+    val requestedUsagePlanId: String  = usagePlans(updateRequest.usagePlan.toUpperCase)
+
     def createNewApiKey(apiKeyName: String, apiKeyValue: String): String =
       apiGatewayClient.createApiKey(
         CreateApiKeyRequest.builder()
@@ -63,11 +45,11 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
     getAwsApiKeyIdByApplicationName(updateRequest.apiKeyName) match {
       case Some(apiKeyId) =>
         logger.log(s"Found existing API Key Id [$apiKeyId] for Application [${updateRequest.apiKeyName}]")
-        (apiKeyId, false)
+        moveAPIKeyToUsagePlan(apiKeyId, requestedUsagePlanId)
       case None =>
         val newAPIKeyId = createNewApiKey(updateRequest.apiKeyName, updateRequest.apiKeyValue)
         logger.log(s"Created API Key with Id [$newAPIKeyId] for Application [${updateRequest.apiKeyName}]")
-        (newAPIKeyId, true)
+        addAPIKeyToUsagePlan(newAPIKeyId, requestedUsagePlanId)
     }
   }
 
