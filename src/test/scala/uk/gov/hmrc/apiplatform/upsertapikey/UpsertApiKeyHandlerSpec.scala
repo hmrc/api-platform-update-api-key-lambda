@@ -14,7 +14,6 @@ import org.scalatest.mockito.MockitoSugar
 import org.scalatest.{Matchers, WordSpecLike}
 import software.amazon.awssdk.services.apigateway.ApiGatewayClient
 import software.amazon.awssdk.services.apigateway.model._
-import software.amazon.awssdk.services.sqs.SqsClient
 
 import scala.collection.JavaConversions._
 
@@ -109,7 +108,6 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
     }
 
     val mockAPIGatewayClient: ApiGatewayClient = mock[ApiGatewayClient]
-    val mockSqsClient: SqsClient = mock[SqsClient]
 
     val usagePlans: Map[String, String] =
       Map(
@@ -121,7 +119,7 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
     val environment: Map[String, String] =
       Map("usage_plans" -> usagePlans.map(plan => s""" "${plan._1}" : "${plan._2}" """).mkString("{", ",", "}"))
 
-    val upsertApiKeyHandler = new UpsertApiKeyHandler(mockAPIGatewayClient, mockSqsClient, environment)
+    val upsertApiKeyHandler = new UpsertApiKeyHandler(mockAPIGatewayClient, environment)
   }
 
   "Update API Key Handler" should {
@@ -264,7 +262,7 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
     }
 
     "throw exception if Usage Plans are not provided in an Environment Variable" in {
-      val upsertApiKeyHandler = new UpsertApiKeyHandler(mock[ApiGatewayClient], mock[SqsClient], Map())
+      val upsertApiKeyHandler = new UpsertApiKeyHandler(mock[ApiGatewayClient], Map())
 
       val exception =
         intercept[NoSuchElementException](upsertApiKeyHandler.handleInput(buildSQSEvent(List(updateMessage("BRONZE", "abc", "123"))), mockContext))

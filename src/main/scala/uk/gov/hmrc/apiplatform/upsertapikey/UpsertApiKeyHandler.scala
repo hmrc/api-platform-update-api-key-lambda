@@ -4,7 +4,6 @@ import com.amazonaws.services.lambda.runtime.events.SQSEvent
 import com.amazonaws.services.lambda.runtime.{Context, LambdaLogger}
 import software.amazon.awssdk.services.apigateway.ApiGatewayClient
 import software.amazon.awssdk.services.apigateway.model.{CreateApiKeyRequest, CreateUsagePlanKeyRequest, DeleteUsagePlanKeyRequest, GetUsagePlanKeysRequest}
-import software.amazon.awssdk.services.sqs.SqsClient
 import uk.gov.hmrc.api_platform_manage_api.AwsApiGatewayClient.awsApiGatewayClient
 import uk.gov.hmrc.api_platform_manage_api.AwsIdRetriever
 import uk.gov.hmrc.aws_gateway_proxied_request_lambda.SqsHandler
@@ -13,13 +12,12 @@ import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 
 class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
-                          sqsClient: SqsClient,
                           environment: Map[String, String]) extends SqsHandler with AwsIdRetriever {
 
   val UsagePlansEnvironmentVariable: String = "usage_plans"
 
   def this() {
-    this(awsApiGatewayClient, SqsClient.create(), sys.env)
+    this(awsApiGatewayClient, sys.env)
   }
 
   override def handleInput(input: SQSEvent, context: Context): Unit = {
