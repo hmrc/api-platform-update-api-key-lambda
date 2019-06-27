@@ -1,4 +1,4 @@
-package uk.gov.hmrc.apiplatform.updateapikey
+package uk.gov.hmrc.apiplatform.upsertapikey
 
 import com.amazonaws.services.lambda.runtime.events.SQSEvent
 import com.amazonaws.services.lambda.runtime.{Context, LambdaLogger}
