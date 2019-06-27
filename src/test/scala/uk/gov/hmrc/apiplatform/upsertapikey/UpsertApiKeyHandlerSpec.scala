@@ -1,4 +1,4 @@
-package uk.gov.hmrc.apiplatform.updateapikey
+package uk.gov.hmrc.apiplatform.upsertapikey
 
 import java.util.UUID
 
