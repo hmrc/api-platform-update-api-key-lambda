@@ -37,6 +37,7 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
         CreateApiKeyRequest.builder()
           .name(apiKeyName)
           .value(apiKeyValue)
+          .enabled(true)
           .build())
         .id()
 

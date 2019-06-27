@@ -145,6 +145,7 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
       val capturedCreateApiKeyRequest: CreateApiKeyRequest = captor.getValue
       capturedCreateApiKeyRequest.name() shouldBe apiKeyName
       capturedCreateApiKeyRequest.value() shouldBe apiKeyValue
+      capturedCreateApiKeyRequest.enabled() shouldBe true
     }
 
     def verifyCapturedCreateUsagePlanKeyRequest(captor: ArgumentCaptor[CreateUsagePlanKeyRequest], apiKeyId: String, usagePlanId: String): Unit = {
