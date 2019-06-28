@@ -98,7 +98,7 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
 
     val response = apiGatewayClient.getUsagePlanKeys(buildGetUsagePlanKeysRequest(position))
 
-    response.items().asScala.find(usagePlanKey => usagePlanKey.value() == apiKeyId) match {
+    response.items().asScala.find(usagePlanKey => usagePlanKey.id == apiKeyId) match {
       case Some(_) => true
       case _ => if (response.position == null) false else apiKeyAssociatedWithUsagePlan(apiKeyId, usagePlanId, Some(response.position))
     }
