@@ -23,7 +23,7 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
     case class TestApiKey(id: String, name: String, value: String)
 
     def toApiKey(testApiKey: TestApiKey): ApiKey = ApiKey.builder().id(testApiKey.id).name(testApiKey.name).value(testApiKey.value).build()
-    def toUsagePlanKey(testApiKey: TestApiKey): UsagePlanKey = UsagePlanKey.builder().value(testApiKey.id).build()
+    def toUsagePlanKey(testApiKey: TestApiKey): UsagePlanKey = UsagePlanKey.builder().id(testApiKey.id).build()
 
     def mockedGetApiKeysCallReturns(existingAPIKeys: Seq[TestApiKey]): OngoingStubbing[GetApiKeysResponse] =
       when(mockAPIGatewayClient.getApiKeys(any[GetApiKeysRequest]))
