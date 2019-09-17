@@ -1,6 +1,6 @@
 package uk.gov.hmrc.apiplatform.upsertapikey
 
-import java.util.UUID
+import java.util.UUID.randomUUID
 
 import com.amazonaws.services.lambda.runtime.events.SQSEvent
 import com.amazonaws.services.lambda.runtime.events.SQSEvent.SQSMessage
@@ -14,10 +14,11 @@ import org.scalatest.mockito.MockitoSugar
 import org.scalatest.{Matchers, WordSpecLike}
 import software.amazon.awssdk.services.apigateway.ApiGatewayClient
 import software.amazon.awssdk.services.apigateway.model._
+import uk.gov.hmrc.aws_gateway_proxied_request_lambda.JsonMapper
 
 import scala.collection.JavaConversions._
 
-class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSugar {
+class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSugar with JsonMapper {
 
   trait Setup {
     case class TestApiKey(id: String, name: String, value: String)
@@ -66,13 +67,13 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
                                  var platinumUsagePlanKeys: Seq[TestApiKey]) extends Answer[GetUsagePlanKeysResponse] {
       override def answer(invocationOnMock: InvocationOnMock): GetUsagePlanKeysResponse = {
         def usagePlanKeys(usagePlanId: String): Seq[UsagePlanKey] =
-          if (usagePlanId == usagePlans("BRONZE")) {
+          if (usagePlans("BRONZE").contains(usagePlanId)) {
             bronzeUsagePlanKeys.map(toUsagePlanKey)
-          } else if (usagePlanId == usagePlans("SILVER")) {
+          } else if (usagePlans("SILVER").contains(usagePlanId)) {
             silverUsagePlanKeys.map(toUsagePlanKey)
-          } else if (usagePlanId == usagePlans("GOLD")) {
+          } else if (usagePlans("GOLD").contains(usagePlanId)) {
             goldUsagePlanKeys.map(toUsagePlanKey)
-          } else if (usagePlanId == usagePlans("PLATINUM")) {
+          } else if (usagePlans("PLATINUM").contains(usagePlanId)) {
             platinumUsagePlanKeys.map(toUsagePlanKey)
           } else {
             Seq.empty
@@ -83,9 +84,9 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
       }
     }
 
-    class PagedGetUsagePlanKeysAnswer(matchingAPIKey: TestApiKey, usagePlanId: String, numberOfPages: Int) extends Answer[GetUsagePlanKeysResponse] {
+    class PagedGetUsagePlanKeysAnswer(matchingAPIKey: TestApiKey, usagePlanIds: Seq[String], numberOfPages: Int) extends Answer[GetUsagePlanKeysResponse] {
       override def answer(invocationOnMock: InvocationOnMock): GetUsagePlanKeysResponse = {
-        def randomUsagePlanKey: UsagePlanKey = toUsagePlanKey(TestApiKey(UUID.randomUUID().toString, UUID.randomUUID().toString, UUID.randomUUID().toString))
+        def randomUsagePlanKey: UsagePlanKey = toUsagePlanKey(TestApiKey(randomUUID().toString, randomUUID().toString, randomUUID().toString))
 
         def nextPosition(position: String): String = {
           position match {
@@ -95,7 +96,7 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
         }
 
         val request: GetUsagePlanKeysRequest = invocationOnMock.getArgument(0)
-        if (request.usagePlanId() != usagePlanId)
+        if (!usagePlanIds.contains(request.usagePlanId))
           GetUsagePlanKeysResponse.builder().build()
         else {
           if (request.position() == numberOfPages.toString)
@@ -109,15 +110,16 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
 
     val mockAPIGatewayClient: ApiGatewayClient = mock[ApiGatewayClient]
 
-    val usagePlans: Map[String, String] =
+    val usagePlans: Map[String, Seq[String]] =
       Map(
-        "BRONZE" -> UUID.randomUUID().toString,
-        "SILVER" -> UUID.randomUUID().toString,
-        "GOLD" -> UUID.randomUUID().toString,
-        "PLATINUM" -> UUID.randomUUID().toString)
+        "BRONZE" -> Seq(randomUUID().toString, randomUUID().toString),
+        "SILVER" -> Seq(randomUUID().toString, randomUUID().toString),
+        "GOLD" -> Seq(randomUUID().toString, randomUUID().toString),
+        "PLATINUM" -> Seq(randomUUID().toString, randomUUID().toString)
+      )
 
-    val environment: Map[String, String] =
-      Map("usage_plans" -> usagePlans.map(plan => s""" "${plan._1}" : "${plan._2}" """).mkString("{", ",", "}"))
+    val usagePlansJson: String = toJson(usagePlans)
+    val environment: Map[String, String] = Map("usage_plans" -> usagePlansJson)
 
     val upsertApiKeyHandler = new UpsertApiKeyHandler(mockAPIGatewayClient, environment)
   }
@@ -148,27 +150,27 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
       capturedCreateApiKeyRequest.enabled() shouldBe true
     }
 
-    def verifyCapturedCreateUsagePlanKeyRequest(captor: ArgumentCaptor[CreateUsagePlanKeyRequest], apiKeyId: String, usagePlanId: String): Unit = {
-      val capturedCreateUsagePlanKeyRequest: CreateUsagePlanKeyRequest = captor.getValue
-      capturedCreateUsagePlanKeyRequest.keyId() shouldBe apiKeyId
-      capturedCreateUsagePlanKeyRequest.usagePlanId() shouldBe usagePlanId
-      capturedCreateUsagePlanKeyRequest.keyType() shouldBe "API_KEY"
+    def verifyCapturedCreateUsagePlanKeyRequest(captor: ArgumentCaptor[CreateUsagePlanKeyRequest], apiKeyId: String, usagePlanIds: Seq[String]): Unit = {
+      val capturedCreateUsagePlanKeyRequests: Seq[CreateUsagePlanKeyRequest] = captor.getAllValues.toSeq
+      capturedCreateUsagePlanKeyRequests.map(_.keyId) should contain only apiKeyId
+      capturedCreateUsagePlanKeyRequests.map(_.usagePlanId) should contain theSameElementsAs usagePlanIds
+      capturedCreateUsagePlanKeyRequests.map(_.keyType) should contain only "API_KEY"
     }
 
-    def verifyCapturedDeleteUsagePlanKeyRequest(captor: ArgumentCaptor[DeleteUsagePlanKeyRequest], apiKeyId: String, usagePlanId: String): Unit = {
-      val capturedDeleteUsagePlanKeyRequest = captor.getValue
-      capturedDeleteUsagePlanKeyRequest.keyId() shouldBe apiKeyId
-      capturedDeleteUsagePlanKeyRequest.usagePlanId() shouldBe usagePlanId
+    def verifyCapturedDeleteUsagePlanKeyRequest(captor: ArgumentCaptor[DeleteUsagePlanKeyRequest], apiKeyId: String, usagePlanIds: Seq[String]): Unit = {
+      val capturedDeleteUsagePlanKeyRequests = captor.getAllValues.toSeq
+      capturedDeleteUsagePlanKeyRequests.map(_.keyId) should contain only apiKeyId
+      capturedDeleteUsagePlanKeyRequests.map(_.usagePlanId) should contain theSameElementsAs usagePlanIds
     }
 
     def validSQSEvent(usagePlan: String, apiKeyName: String, apiKeyValue: String): SQSEvent =
       buildSQSEvent(List(updateMessage(usagePlan, apiKeyName, apiKeyValue)))
 
-    "create API Key if it does not exist and adds it to Usage Plan" in new Setup {
+    "create API Key if it does not exist and adds it to Usage Plans" in new Setup {
       val usagePlan: String = "BRONZE"
-      val apiKeyName: String = UUID.randomUUID().toString
-      val apiKeyValue: String = UUID.randomUUID().toString
-      val generatedApiKeyId: String = UUID.randomUUID().toString
+      val apiKeyName: String = randomUUID().toString
+      val apiKeyValue: String = randomUUID().toString
+      val generatedApiKeyId: String = randomUUID().toString
 
       mockedGetApiKeysCallReturns(List.empty)
       private val createApiKeyRequestCaptor: ArgumentCaptor[CreateApiKeyRequest] = captureCreateAPIKeyRequests(generatedApiKeyId)
@@ -180,11 +182,11 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
       verifyCapturedCreateUsagePlanKeyRequest(createUsagePlanKeyRequestCaptor, generatedApiKeyId, usagePlans(usagePlan))
     }
 
-    "does not update Usage Plan if API Key is already associated with it" in new Setup {
+    "does not update Usage Plans if API Key is already associated with them" in new Setup {
       val usagePlan: String = "BRONZE"
-      val apiKeyId: String = UUID.randomUUID().toString
-      val apiKeyName: String = UUID.randomUUID().toString
-      val apiKeyValue: String = UUID.randomUUID().toString
+      val apiKeyId: String = randomUUID().toString
+      val apiKeyName: String = randomUUID().toString
+      val apiKeyValue: String = randomUUID().toString
       val matchingApiKey: TestApiKey = TestApiKey(apiKeyId, apiKeyName, apiKeyValue)
 
       mockedGetApiKeysCallReturns(List(matchingApiKey))
@@ -197,9 +199,9 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
 
     "moves API Key from one Usage Plan to another if requested" in new Setup {
       val usagePlan: String = "SILVER"
-      val apiKeyId: String = UUID.randomUUID().toString
-      val apiKeyName: String = UUID.randomUUID().toString
-      val apiKeyValue: String = UUID.randomUUID().toString
+      val apiKeyId: String = randomUUID().toString
+      val apiKeyName: String = randomUUID().toString
+      val apiKeyValue: String = randomUUID().toString
       val matchingApiKey: TestApiKey = TestApiKey(apiKeyId, apiKeyName, apiKeyValue)
 
       mockedGetApiKeysCallReturns(List(matchingApiKey))
@@ -215,9 +217,9 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
 
     "handle multiple pages of Usage Plan Keys returned" in new Setup {
       val usagePlan: String = "BRONZE"
-      val apiKeyId: String = UUID.randomUUID().toString
-      val apiKeyName: String = UUID.randomUUID().toString
-      val apiKeyValue: String = UUID.randomUUID().toString
+      val apiKeyId: String = randomUUID().toString
+      val apiKeyName: String = randomUUID().toString
+      val apiKeyValue: String = randomUUID().toString
       val matchingApiKey: TestApiKey = TestApiKey(apiKeyId, apiKeyName, apiKeyValue)
 
       mockedGetApiKeysCallReturns(List(matchingApiKey))
@@ -231,9 +233,9 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
 
     "handle lower case Usage Plan name" in new Setup {
       val usagePlan: String = "bronze"
-      val apiKeyId: String = UUID.randomUUID().toString
-      val apiKeyName: String = UUID.randomUUID().toString
-      val apiKeyValue: String = UUID.randomUUID().toString
+      val apiKeyId: String = randomUUID().toString
+      val apiKeyName: String = randomUUID().toString
+      val apiKeyValue: String = randomUUID().toString
       val matchingApiKey: TestApiKey = TestApiKey(apiKeyId, apiKeyName, apiKeyValue)
 
       mockedGetApiKeysCallReturns(List(matchingApiKey))
@@ -274,7 +276,7 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
     "throw exception if requested Usage Plan does not exist" in new Setup {
       val invalidUsagePlan = "foobar"
       val exception: NoSuchElementException =
-        intercept[NoSuchElementException](upsertApiKeyHandler.handleInput(validSQSEvent(invalidUsagePlan, UUID.randomUUID().toString, UUID.randomUUID().toString), mockContext))
+        intercept[NoSuchElementException](upsertApiKeyHandler.handleInput(validSQSEvent(invalidUsagePlan, randomUUID().toString, randomUUID().toString), mockContext))
 
       exception.getMessage shouldEqual s"key not found: ${invalidUsagePlan.toUpperCase}"
     }
