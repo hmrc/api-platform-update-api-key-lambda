@@ -41,10 +41,10 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
           .build())
         .id()
 
-    getAwsApiKeyIdByApplicationName(updateRequest.apiKeyName) match {
-      case Some(apiKeyId) =>
-        logger.log(s"Found existing API Key Id [$apiKeyId] for Application [${updateRequest.apiKeyName}]")
-        moveAPIKeyToUsagePlans(apiKeyId, requestedUsagePlanIds)
+    getAwsApiKeyByKeyName(updateRequest.apiKeyName) match {
+      case Some(apiKey) =>
+        logger.log(s"Found existing API Key Id [${apiKey.id}] for Application [${updateRequest.apiKeyName}]")
+        moveAPIKeyToUsagePlans(apiKey.id, requestedUsagePlanIds)
       case None =>
         val newAPIKeyId = createNewApiKey(updateRequest.apiKeyName, updateRequest.apiKeyValue)
         logger.log(s"Created API Key with Id [$newAPIKeyId] for Application [${updateRequest.apiKeyName}]")
