@@ -41,6 +41,7 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
           .build())
         .id()
 
+    logger.log(s"Looking for API key for ${updateRequest.apiKeyName}")
     getAwsApiKeyByKeyName(updateRequest.apiKeyName) match {
       case Some(apiKey) =>
         logger.log(s"Found existing API Key Id [${apiKey.id}] for Application [${updateRequest.apiKeyName}]")
@@ -98,7 +99,8 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
   }
 
   @tailrec
-  private def apiKeyAssociatedWithUsagePlan(apiKeyId: String, usagePlanId: String, position: Option[String] = None): Boolean = {
+  private def apiKeyAssociatedWithUsagePlan(apiKeyId: String, usagePlanId: String, position: Option[String] = None)
+                                           (implicit logger: LambdaLogger): Boolean = {
     def buildGetUsagePlanKeysRequest(position: Option[String]): GetUsagePlanKeysRequest = {
       position match {
         case Some(p) => GetUsagePlanKeysRequest.builder().usagePlanId(usagePlanId).limit(Limit).position(p).build()
@@ -106,6 +108,7 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
       }
     }
 
+    logger.log(s"Looking for usage plan keys for usage plan ${usagePlanId}")
     val response = apiGatewayClient.getUsagePlanKeys(buildGetUsagePlanKeysRequest(position))
 
     response.items().asScala.find(usagePlanKey => usagePlanKey.id == apiKeyId) match {
