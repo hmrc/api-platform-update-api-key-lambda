@@ -2,7 +2,7 @@ lazy val appName = "api-platform-update-api-key-lambda"
 lazy val appDependencies: Seq[ModuleID] = compileDependencies ++ testDependencies
 
 lazy val compileDependencies = Seq(
-  "uk.gov.hmrc" %% "api-platform-manage-api" % "0.38.0"
+  "uk.gov.hmrc" %% "api-platform-manage-api" % "0.42.0"
 )
 
 lazy val testScope: String = "test"
@@ -18,7 +18,7 @@ lazy val lambda = (project in file("."))
   .enablePlugins(plugins: _*)
   .settings(
     name := appName,
-    scalaVersion := "2.11.11",
+    scalaVersion := "2.12.10",
     libraryDependencies ++= appDependencies,
     parallelExecution in Test := false,
     fork in Test := false,
