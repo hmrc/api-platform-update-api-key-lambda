@@ -1,7 +1,18 @@
 
 # api-platform-update-api-key-lambda
 
-This is a placeholder README.md for a new repository
+Lambda function which:
+* creates an AWS API Gateway key (if it doesn't exist)
+* puts the AWS API Gateway key in the appropriate AWS API Gateway Usage Plan
+
+The `event` for the Lambda function is an SQS message. The body of the SQS message is JSON. For example:
+```
+{
+  "apiKeyName":"abcdef1234",
+  "apiKeyValue":"acbdef1234567890abcdef1234567890",
+  "usagePlan":"BRONZE"
+}
+```
 
 ### License
 
