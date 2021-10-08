@@ -98,8 +98,6 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
     }
   }
 
-
-
   @tailrec
   private def apiKeyAssociatedWithUsagePlan(apiKeyId: String, usagePlanId: String, position: Option[String] = None)
                                            (implicit logger: LambdaLogger): Boolean = {
@@ -111,8 +109,7 @@ class UpsertApiKeyHandler(override val apiGatewayClient: ApiGatewayClient,
     }
 
     logger.log(s"Looking for usage plan keys for usage plan ${usagePlanId}")
-    val getUsagePlan = buildGetUsagePlanKeysRequest(position)
-    val response = apiGatewayClient.getUsagePlanKeys(getUsagePlan)
+    val response = apiGatewayClient.getUsagePlanKeys(buildGetUsagePlanKeysRequest(position))
 
     response.items().asScala.find(usagePlanKey => usagePlanKey.id == apiKeyId) match {
       case Some(_) => true
