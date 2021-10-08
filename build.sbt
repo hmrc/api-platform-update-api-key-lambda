@@ -25,7 +25,7 @@ lazy val lambda = (project in file("."))
     retrieveManaged := true
   )
   .settings(
-    resolvers += Resolver.bintrayRepo("hmrc", "releases"),
+    resolvers += "hmrc-releases" at "https://artefacts.tax.service.gov.uk/artifactory/hmrc-releases/",
     resolvers += Resolver.jcenterRepo
   )
   .settings(
