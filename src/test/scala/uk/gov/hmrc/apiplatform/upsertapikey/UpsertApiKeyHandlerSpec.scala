@@ -10,15 +10,16 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.{Answer, OngoingStubbing}
-import org.scalatest.mockito.MockitoSugar
-import org.scalatest.{Matchers, WordSpecLike}
 import software.amazon.awssdk.services.apigateway.ApiGatewayClient
 import software.amazon.awssdk.services.apigateway.model._
-import uk.gov.hmrc.aws_gateway_proxied_request_lambda.JsonMapper
 
-import scala.collection.JavaConversions._
+import scala.jdk.CollectionConverters._
+import uk.gov.hmrc.api_platform_manage_api.utils.JsonMapper
+import org.scalatestplus.mockito.MockitoSugar
+import org.scalatest.wordspec.AnyWordSpec
+import org.scalatest.matchers.should.Matchers
 
-class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSugar with JsonMapper {
+class UpsertApiKeyHandlerSpec extends AnyWordSpec with Matchers with MockitoSugar with JsonMapper {
 
   trait Setup {
     case class TestApiKey(id: String, name: String, value: String)
@@ -30,7 +31,7 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
       when(mockAPIGatewayClient.getApiKeys(any[GetApiKeysRequest]))
         .thenReturn(
           GetApiKeysResponse.builder()
-            .items(existingAPIKeys.map(toApiKey))
+            .items(existingAPIKeys.map(toApiKey).asJava)
             .build())
 
     def mockedGetUsagePlanKeysReturns(bronzeUsagePlanKeys: Seq[TestApiKey] = Seq.empty,
@@ -80,7 +81,7 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
           }
 
         val request: GetUsagePlanKeysRequest = invocationOnMock.getArgument(0)
-        GetUsagePlanKeysResponse.builder().items(usagePlanKeys(request.usagePlanId())).build()
+        GetUsagePlanKeysResponse.builder().items(usagePlanKeys(request.usagePlanId()).asJava).build()
       }
     }
 
@@ -130,7 +131,7 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
 
     def buildSQSEvent(messages: Seq[SQSMessage]): SQSEvent = {
       val sqsEvent = new SQSEvent()
-      sqsEvent.setRecords(messages)
+      sqsEvent.setRecords(messages.asJava)
 
       sqsEvent
     }
@@ -151,14 +152,14 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
     }
 
     def verifyCapturedCreateUsagePlanKeyRequest(captor: ArgumentCaptor[CreateUsagePlanKeyRequest], apiKeyId: String, usagePlanIds: Seq[String]): Unit = {
-      val capturedCreateUsagePlanKeyRequests: Seq[CreateUsagePlanKeyRequest] = captor.getAllValues.toSeq
+      val capturedCreateUsagePlanKeyRequests: Seq[CreateUsagePlanKeyRequest] = captor.getAllValues.asScala.toSeq
       capturedCreateUsagePlanKeyRequests.map(_.keyId) should contain only apiKeyId
       capturedCreateUsagePlanKeyRequests.map(_.usagePlanId) should contain theSameElementsAs usagePlanIds
       capturedCreateUsagePlanKeyRequests.map(_.keyType) should contain only "API_KEY"
     }
 
     def verifyCapturedDeleteUsagePlanKeyRequest(captor: ArgumentCaptor[DeleteUsagePlanKeyRequest], apiKeyId: String, usagePlanIds: Seq[String]): Unit = {
-      val capturedDeleteUsagePlanKeyRequests = captor.getAllValues.toSeq
+      val capturedDeleteUsagePlanKeyRequests = captor.getAllValues.asScala.toSeq
       capturedDeleteUsagePlanKeyRequests.map(_.keyId) should contain only apiKeyId
       capturedDeleteUsagePlanKeyRequests.map(_.usagePlanId) should contain theSameElementsAs usagePlanIds
     }
