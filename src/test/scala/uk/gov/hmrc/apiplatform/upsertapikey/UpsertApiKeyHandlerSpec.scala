@@ -18,7 +18,6 @@ import uk.gov.hmrc.api_platform_manage_api.utils.JsonMapper
 import org.scalatestplus.mockito.MockitoSugar
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
-import org.mockito.verification.VerificationMode
 
 class UpsertApiKeyHandlerSpec extends AnyWordSpec with Matchers with MockitoSugar with JsonMapper {
 
