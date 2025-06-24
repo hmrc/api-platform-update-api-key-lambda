@@ -7,7 +7,7 @@ import com.amazonaws.services.lambda.runtime.events.SQSEvent.SQSMessage
 import com.amazonaws.services.lambda.runtime.{Context, LambdaLogger}
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{times, verify, when}
+import org.mockito.Mockito.{times, verify, when, atLeastOnce}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.{Answer, OngoingStubbing}
 import software.amazon.awssdk.services.apigateway.ApiGatewayClient
@@ -18,6 +18,7 @@ import uk.gov.hmrc.api_platform_manage_api.utils.JsonMapper
 import org.scalatestplus.mockito.MockitoSugar
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
+import org.mockito.verification.VerificationMode
 
 class UpsertApiKeyHandlerSpec extends AnyWordSpec with Matchers with MockitoSugar with JsonMapper {
 
@@ -41,23 +42,31 @@ class UpsertApiKeyHandlerSpec extends AnyWordSpec with Matchers with MockitoSuga
       when(mockAPIGatewayClient.getUsagePlanKeys(any[GetUsagePlanKeysRequest]))
         .thenAnswer(new GetUsagePlanKeysAnswer(bronzeUsagePlanKeys, silverUsagePlanKeys, goldUsagePlanKeys, platinumUsagePlanKeys))
 
-    def captureCreateAPIKeyRequests(returnedAPIKeyId: String): ArgumentCaptor[CreateApiKeyRequest] = {
-      val captor: ArgumentCaptor[CreateApiKeyRequest] = ArgumentCaptor.forClass(classOf[CreateApiKeyRequest])
-      when(mockAPIGatewayClient.createApiKey(captor.capture())).thenReturn(CreateApiKeyResponse.builder().id(returnedAPIKeyId).build())
+    def mockCreateAPIKeyRequests(returnedAPIKeyId: String) =
+      when(mockAPIGatewayClient.createApiKey(any[CreateApiKeyRequest])).thenReturn(CreateApiKeyResponse.builder().id(returnedAPIKeyId).build())
 
+    def captureCreateAPIKeyRequests(): ArgumentCaptor[CreateApiKeyRequest] = {
+      val captor: ArgumentCaptor[CreateApiKeyRequest] = ArgumentCaptor.forClass(classOf[CreateApiKeyRequest])
+      verify(mockAPIGatewayClient, atLeastOnce).createApiKey(captor.capture())
       captor
     }
+
+    def mockCreateUsagePlanKeyRequests() =
+      when(mockAPIGatewayClient.createUsagePlanKey(any[CreateUsagePlanKeyRequest])).thenReturn(CreateUsagePlanKeyResponse.builder().build())
 
     def captureCreateUsagePlanKeyRequests(): ArgumentCaptor[CreateUsagePlanKeyRequest] = {
       val captor: ArgumentCaptor[CreateUsagePlanKeyRequest] = ArgumentCaptor.forClass(classOf[CreateUsagePlanKeyRequest])
-      when(mockAPIGatewayClient.createUsagePlanKey(captor.capture())).thenReturn(CreateUsagePlanKeyResponse.builder().build())
+      verify(mockAPIGatewayClient, atLeastOnce).createUsagePlanKey(captor.capture())
 
       captor
     }
 
+    def mockDeleteUsagePlanKeyRequests() =
+      when(mockAPIGatewayClient.deleteUsagePlanKey(any[DeleteUsagePlanKeyRequest])).thenReturn(DeleteUsagePlanKeyResponse.builder().build())
+
     def captureDeleteUsagePlanKeyRequests(): ArgumentCaptor[DeleteUsagePlanKeyRequest] = {
       val captor: ArgumentCaptor[DeleteUsagePlanKeyRequest] = ArgumentCaptor.forClass(classOf[DeleteUsagePlanKeyRequest])
-      when(mockAPIGatewayClient.deleteUsagePlanKey(captor.capture())).thenReturn(DeleteUsagePlanKeyResponse.builder().build())
+      verify(mockAPIGatewayClient, atLeastOnce).deleteUsagePlanKey(captor.capture())
 
       captor
     }
@@ -174,12 +183,14 @@ class UpsertApiKeyHandlerSpec extends AnyWordSpec with Matchers with MockitoSuga
       val generatedApiKeyId: String = randomUUID().toString
 
       mockedGetApiKeysCallReturns(List.empty)
-      private val createApiKeyRequestCaptor: ArgumentCaptor[CreateApiKeyRequest] = captureCreateAPIKeyRequests(generatedApiKeyId)
-      private val createUsagePlanKeyRequestCaptor: ArgumentCaptor[CreateUsagePlanKeyRequest] = captureCreateUsagePlanKeyRequests()
+      mockCreateAPIKeyRequests(generatedApiKeyId)
+      mockCreateUsagePlanKeyRequests()
 
       upsertApiKeyHandler.handleInput(buildSQSEvent(Seq(updateMessage(usagePlan, apiKeyName, apiKeyValue))), mockContext)
 
+      val createApiKeyRequestCaptor: ArgumentCaptor[CreateApiKeyRequest] = captureCreateAPIKeyRequests()
       verifyCapturedCreateApiKeyRequest(createApiKeyRequestCaptor, apiKeyName, apiKeyValue)
+      val createUsagePlanKeyRequestCaptor: ArgumentCaptor[CreateUsagePlanKeyRequest] = captureCreateUsagePlanKeyRequests()
       verifyCapturedCreateUsagePlanKeyRequest(createUsagePlanKeyRequestCaptor, generatedApiKeyId, usagePlans(usagePlan))
     }
 
@@ -207,12 +218,14 @@ class UpsertApiKeyHandlerSpec extends AnyWordSpec with Matchers with MockitoSuga
 
       mockedGetApiKeysCallReturns(List(matchingApiKey))
       mockedGetUsagePlanKeysReturns(bronzeUsagePlanKeys = Seq(matchingApiKey))
-      private val deleteUsagePlanKeyRequestCaptor: ArgumentCaptor[DeleteUsagePlanKeyRequest] = captureDeleteUsagePlanKeyRequests()
-      private val createUsagePlanKeyRequestCaptor: ArgumentCaptor[CreateUsagePlanKeyRequest] = captureCreateUsagePlanKeyRequests()
+      mockDeleteUsagePlanKeyRequests()
+      mockCreateUsagePlanKeyRequests()
 
       upsertApiKeyHandler.handleInput(validSQSEvent(usagePlan, apiKeyName, apiKeyValue), mockContext)
 
+      val deleteUsagePlanKeyRequestCaptor: ArgumentCaptor[DeleteUsagePlanKeyRequest] = captureDeleteUsagePlanKeyRequests()
       verifyCapturedDeleteUsagePlanKeyRequest(deleteUsagePlanKeyRequestCaptor, apiKeyId, usagePlans("BRONZE"))
+      val createUsagePlanKeyRequestCaptor: ArgumentCaptor[CreateUsagePlanKeyRequest] = captureCreateUsagePlanKeyRequests()
       verifyCapturedCreateUsagePlanKeyRequest(createUsagePlanKeyRequestCaptor, apiKeyId, usagePlans(usagePlan))
     }
 
