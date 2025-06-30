@@ -7,18 +7,19 @@ import com.amazonaws.services.lambda.runtime.events.SQSEvent.SQSMessage
 import com.amazonaws.services.lambda.runtime.{Context, LambdaLogger}
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{times, verify, when}
+import org.mockito.Mockito.{times, verify, when, atLeastOnce}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.{Answer, OngoingStubbing}
-import org.scalatest.mockito.MockitoSugar
-import org.scalatest.{Matchers, WordSpecLike}
 import software.amazon.awssdk.services.apigateway.ApiGatewayClient
 import software.amazon.awssdk.services.apigateway.model._
-import uk.gov.hmrc.aws_gateway_proxied_request_lambda.JsonMapper
 
-import scala.collection.JavaConversions._
+import scala.jdk.CollectionConverters._
+import uk.gov.hmrc.api_platform_manage_api.utils.JsonMapper
+import org.scalatestplus.mockito.MockitoSugar
+import org.scalatest.wordspec.AnyWordSpec
+import org.scalatest.matchers.should.Matchers
 
-class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSugar with JsonMapper {
+class UpsertApiKeyHandlerSpec extends AnyWordSpec with Matchers with MockitoSugar with JsonMapper {
 
   trait Setup {
     case class TestApiKey(id: String, name: String, value: String)
@@ -30,7 +31,7 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
       when(mockAPIGatewayClient.getApiKeys(any[GetApiKeysRequest]))
         .thenReturn(
           GetApiKeysResponse.builder()
-            .items(existingAPIKeys.map(toApiKey))
+            .items(existingAPIKeys.map(toApiKey).asJava)
             .build())
 
     def mockedGetUsagePlanKeysReturns(bronzeUsagePlanKeys: Seq[TestApiKey] = Seq.empty,
@@ -40,23 +41,31 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
       when(mockAPIGatewayClient.getUsagePlanKeys(any[GetUsagePlanKeysRequest]))
         .thenAnswer(new GetUsagePlanKeysAnswer(bronzeUsagePlanKeys, silverUsagePlanKeys, goldUsagePlanKeys, platinumUsagePlanKeys))
 
-    def captureCreateAPIKeyRequests(returnedAPIKeyId: String): ArgumentCaptor[CreateApiKeyRequest] = {
-      val captor: ArgumentCaptor[CreateApiKeyRequest] = ArgumentCaptor.forClass(classOf[CreateApiKeyRequest])
-      when(mockAPIGatewayClient.createApiKey(captor.capture())).thenReturn(CreateApiKeyResponse.builder().id(returnedAPIKeyId).build())
+    def mockCreateAPIKeyRequests(returnedAPIKeyId: String) =
+      when(mockAPIGatewayClient.createApiKey(any[CreateApiKeyRequest])).thenReturn(CreateApiKeyResponse.builder().id(returnedAPIKeyId).build())
 
+    def captureCreateAPIKeyRequests(): ArgumentCaptor[CreateApiKeyRequest] = {
+      val captor: ArgumentCaptor[CreateApiKeyRequest] = ArgumentCaptor.forClass(classOf[CreateApiKeyRequest])
+      verify(mockAPIGatewayClient, atLeastOnce).createApiKey(captor.capture())
       captor
     }
+
+    def mockCreateUsagePlanKeyRequests() =
+      when(mockAPIGatewayClient.createUsagePlanKey(any[CreateUsagePlanKeyRequest])).thenReturn(CreateUsagePlanKeyResponse.builder().build())
 
     def captureCreateUsagePlanKeyRequests(): ArgumentCaptor[CreateUsagePlanKeyRequest] = {
       val captor: ArgumentCaptor[CreateUsagePlanKeyRequest] = ArgumentCaptor.forClass(classOf[CreateUsagePlanKeyRequest])
-      when(mockAPIGatewayClient.createUsagePlanKey(captor.capture())).thenReturn(CreateUsagePlanKeyResponse.builder().build())
+      verify(mockAPIGatewayClient, atLeastOnce).createUsagePlanKey(captor.capture())
 
       captor
     }
 
+    def mockDeleteUsagePlanKeyRequests() =
+      when(mockAPIGatewayClient.deleteUsagePlanKey(any[DeleteUsagePlanKeyRequest])).thenReturn(DeleteUsagePlanKeyResponse.builder().build())
+
     def captureDeleteUsagePlanKeyRequests(): ArgumentCaptor[DeleteUsagePlanKeyRequest] = {
       val captor: ArgumentCaptor[DeleteUsagePlanKeyRequest] = ArgumentCaptor.forClass(classOf[DeleteUsagePlanKeyRequest])
-      when(mockAPIGatewayClient.deleteUsagePlanKey(captor.capture())).thenReturn(DeleteUsagePlanKeyResponse.builder().build())
+      verify(mockAPIGatewayClient, atLeastOnce).deleteUsagePlanKey(captor.capture())
 
       captor
     }
@@ -80,7 +89,7 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
           }
 
         val request: GetUsagePlanKeysRequest = invocationOnMock.getArgument(0)
-        GetUsagePlanKeysResponse.builder().items(usagePlanKeys(request.usagePlanId())).build()
+        GetUsagePlanKeysResponse.builder().items(usagePlanKeys(request.usagePlanId()).asJava).build()
       }
     }
 
@@ -130,7 +139,7 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
 
     def buildSQSEvent(messages: Seq[SQSMessage]): SQSEvent = {
       val sqsEvent = new SQSEvent()
-      sqsEvent.setRecords(messages)
+      sqsEvent.setRecords(messages.asJava)
 
       sqsEvent
     }
@@ -151,14 +160,14 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
     }
 
     def verifyCapturedCreateUsagePlanKeyRequest(captor: ArgumentCaptor[CreateUsagePlanKeyRequest], apiKeyId: String, usagePlanIds: Seq[String]): Unit = {
-      val capturedCreateUsagePlanKeyRequests: Seq[CreateUsagePlanKeyRequest] = captor.getAllValues.toSeq
+      val capturedCreateUsagePlanKeyRequests: Seq[CreateUsagePlanKeyRequest] = captor.getAllValues.asScala.toSeq
       capturedCreateUsagePlanKeyRequests.map(_.keyId) should contain only apiKeyId
       capturedCreateUsagePlanKeyRequests.map(_.usagePlanId) should contain theSameElementsAs usagePlanIds
       capturedCreateUsagePlanKeyRequests.map(_.keyType) should contain only "API_KEY"
     }
 
     def verifyCapturedDeleteUsagePlanKeyRequest(captor: ArgumentCaptor[DeleteUsagePlanKeyRequest], apiKeyId: String, usagePlanIds: Seq[String]): Unit = {
-      val capturedDeleteUsagePlanKeyRequests = captor.getAllValues.toSeq
+      val capturedDeleteUsagePlanKeyRequests = captor.getAllValues.asScala.toSeq
       capturedDeleteUsagePlanKeyRequests.map(_.keyId) should contain only apiKeyId
       capturedDeleteUsagePlanKeyRequests.map(_.usagePlanId) should contain theSameElementsAs usagePlanIds
     }
@@ -173,12 +182,14 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
       val generatedApiKeyId: String = randomUUID().toString
 
       mockedGetApiKeysCallReturns(List.empty)
-      private val createApiKeyRequestCaptor: ArgumentCaptor[CreateApiKeyRequest] = captureCreateAPIKeyRequests(generatedApiKeyId)
-      private val createUsagePlanKeyRequestCaptor: ArgumentCaptor[CreateUsagePlanKeyRequest] = captureCreateUsagePlanKeyRequests()
+      mockCreateAPIKeyRequests(generatedApiKeyId)
+      mockCreateUsagePlanKeyRequests()
 
       upsertApiKeyHandler.handleInput(buildSQSEvent(Seq(updateMessage(usagePlan, apiKeyName, apiKeyValue))), mockContext)
 
+      val createApiKeyRequestCaptor: ArgumentCaptor[CreateApiKeyRequest] = captureCreateAPIKeyRequests()
       verifyCapturedCreateApiKeyRequest(createApiKeyRequestCaptor, apiKeyName, apiKeyValue)
+      val createUsagePlanKeyRequestCaptor: ArgumentCaptor[CreateUsagePlanKeyRequest] = captureCreateUsagePlanKeyRequests()
       verifyCapturedCreateUsagePlanKeyRequest(createUsagePlanKeyRequestCaptor, generatedApiKeyId, usagePlans(usagePlan))
     }
 
@@ -206,12 +217,14 @@ class UpsertApiKeyHandlerSpec extends WordSpecLike with Matchers with MockitoSug
 
       mockedGetApiKeysCallReturns(List(matchingApiKey))
       mockedGetUsagePlanKeysReturns(bronzeUsagePlanKeys = Seq(matchingApiKey))
-      private val deleteUsagePlanKeyRequestCaptor: ArgumentCaptor[DeleteUsagePlanKeyRequest] = captureDeleteUsagePlanKeyRequests()
-      private val createUsagePlanKeyRequestCaptor: ArgumentCaptor[CreateUsagePlanKeyRequest] = captureCreateUsagePlanKeyRequests()
+      mockDeleteUsagePlanKeyRequests()
+      mockCreateUsagePlanKeyRequests()
 
       upsertApiKeyHandler.handleInput(validSQSEvent(usagePlan, apiKeyName, apiKeyValue), mockContext)
 
+      val deleteUsagePlanKeyRequestCaptor: ArgumentCaptor[DeleteUsagePlanKeyRequest] = captureDeleteUsagePlanKeyRequests()
       verifyCapturedDeleteUsagePlanKeyRequest(deleteUsagePlanKeyRequestCaptor, apiKeyId, usagePlans("BRONZE"))
+      val createUsagePlanKeyRequestCaptor: ArgumentCaptor[CreateUsagePlanKeyRequest] = captureCreateUsagePlanKeyRequests()
       verifyCapturedCreateUsagePlanKeyRequest(createUsagePlanKeyRequestCaptor, apiKeyId, usagePlans(usagePlan))
     }
 

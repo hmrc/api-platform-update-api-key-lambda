@@ -6,7 +6,7 @@ import software.amazon.awssdk.services.apigateway.ApiGatewayClient
 import software.amazon.awssdk.services.apigateway.model.{CreateApiKeyRequest, CreateUsagePlanKeyRequest, CreateUsagePlanKeyResponse, DeleteUsagePlanKeyRequest, GetUsagePlanKeysRequest}
 import uk.gov.hmrc.api_platform_manage_api.AwsApiGatewayClient.awsApiGatewayClient
 import uk.gov.hmrc.api_platform_manage_api.AwsIdRetriever
-import uk.gov.hmrc.aws_gateway_proxied_request_lambda.SqsHandler
+import uk.gov.hmrc.api_platform_manage_api.utils.SqsHandler
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._

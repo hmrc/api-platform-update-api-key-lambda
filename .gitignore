@@ -1,3 +1,5 @@
+.*
+!.gitignore
 
 logs
 project/project
@@ -21,5 +23,10 @@ node_modules/
 npm-debug.log
 yarn-debug.log
 yarn-error.log
+api-platform-update-api-key-lambda.zip
+metals.sbt
+.bloop
+.metals
+.vscode
 
     
