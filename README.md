@@ -1,7 +1,7 @@
 
 # api-platform-update-api-key-lambda
 
-Lambda function which:
+A lambda function which:
 * creates an AWS API Gateway key (if it doesn't exist)
 * puts the AWS API Gateway key in the appropriate AWS API Gateway Usage Plan
 
