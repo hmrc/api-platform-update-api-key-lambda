@@ -37,9 +37,10 @@ class UpsertApiKeyHandlerSpec extends AnyWordSpec with Matchers with MockitoSuga
     def mockedGetUsagePlanKeysReturns(bronzeUsagePlanKeys: Seq[TestApiKey] = Seq.empty,
                                       silverUsagePlanKeys: Seq[TestApiKey] = Seq.empty,
                                       goldUsagePlanKeys: Seq[TestApiKey] = Seq.empty,
-                                      platinumUsagePlanKeys: Seq[TestApiKey] = Seq.empty): OngoingStubbing[GetUsagePlanKeysResponse] =
+                                      platinumUsagePlanKeys: Seq[TestApiKey] = Seq.empty,
+                                      rhodiumUsagePlanKeys: Seq[TestApiKey] = Seq.empty): OngoingStubbing[GetUsagePlanKeysResponse] =
       when(mockAPIGatewayClient.getUsagePlanKeys(any[GetUsagePlanKeysRequest]))
-        .thenAnswer(new GetUsagePlanKeysAnswer(bronzeUsagePlanKeys, silverUsagePlanKeys, goldUsagePlanKeys, platinumUsagePlanKeys))
+        .thenAnswer(new GetUsagePlanKeysAnswer(bronzeUsagePlanKeys, silverUsagePlanKeys, goldUsagePlanKeys, platinumUsagePlanKeys, rhodiumUsagePlanKeys))
 
     def mockCreateAPIKeyRequests(returnedAPIKeyId: String) =
       when(mockAPIGatewayClient.createApiKey(any[CreateApiKeyRequest])).thenReturn(CreateApiKeyResponse.builder().id(returnedAPIKeyId).build())
@@ -73,7 +74,8 @@ class UpsertApiKeyHandlerSpec extends AnyWordSpec with Matchers with MockitoSuga
     class GetUsagePlanKeysAnswer(var bronzeUsagePlanKeys: Seq[TestApiKey],
                                  var silverUsagePlanKeys: Seq[TestApiKey],
                                  var goldUsagePlanKeys: Seq[TestApiKey],
-                                 var platinumUsagePlanKeys: Seq[TestApiKey]) extends Answer[GetUsagePlanKeysResponse] {
+                                 var platinumUsagePlanKeys: Seq[TestApiKey],
+                                 var rhodiumUsagePlanKeys: Seq[TestApiKey]) extends Answer[GetUsagePlanKeysResponse] {
       override def answer(invocationOnMock: InvocationOnMock): GetUsagePlanKeysResponse = {
         def usagePlanKeys(usagePlanId: String): Seq[UsagePlanKey] =
           if (usagePlans("BRONZE").contains(usagePlanId)) {
@@ -84,6 +86,8 @@ class UpsertApiKeyHandlerSpec extends AnyWordSpec with Matchers with MockitoSuga
             goldUsagePlanKeys.map(toUsagePlanKey)
           } else if (usagePlans("PLATINUM").contains(usagePlanId)) {
             platinumUsagePlanKeys.map(toUsagePlanKey)
+          } else if (usagePlans("RHODIUM").contains(usagePlanId)) {
+            rhodiumUsagePlanKeys.map(toUsagePlanKey)
           } else {
             Seq.empty
           }
@@ -124,7 +128,8 @@ class UpsertApiKeyHandlerSpec extends AnyWordSpec with Matchers with MockitoSuga
         "BRONZE" -> Seq(randomUUID().toString, randomUUID().toString),
         "SILVER" -> Seq(randomUUID().toString, randomUUID().toString),
         "GOLD" -> Seq(randomUUID().toString, randomUUID().toString),
-        "PLATINUM" -> Seq(randomUUID().toString, randomUUID().toString)
+        "PLATINUM" -> Seq(randomUUID().toString, randomUUID().toString),
+        "RHODIUM" -> Seq(randomUUID().toString, randomUUID().toString)
       )
 
     val usagePlansJson: String = toJson(usagePlans)
